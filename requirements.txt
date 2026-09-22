@@ -1,0 +1,22 @@
+# ============================================================
+# AI-Driven Healthcare & Insurance Analytics
+# IBM SkillsBuild Data Analytics with AI Academic Internship
+# Author: Pappu Ramesh Baraf
+# ============================================================
+
+# Core data processing
+pandas==3.0.0
+numpy==2.4.2
+
+# Visualisation
+matplotlib==3.10.8
+
+# Machine Learning
+scikit-learn==1.8.0
+
+# Interactive dashboard
+streamlit
+
+# Jupyter Notebook support (for .ipynb submission)
+notebook
+ipykernel

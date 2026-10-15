@@ -1,25 +1,79 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Healthcare &amp; Insurance Analytics</title>
-<style>
-body{font:16px/1.6 system-ui,sans-serif;max-width:850px;margin:4rem auto;padding:0 1.25rem;color:#172b4d;background:#f4f7fb}h1{font-size:clamp(2.2rem,6vw,4rem);line-height:1.1}p{color:#52647c}.links{display:flex;flex-wrap:wrap;gap:12px;margin:2rem 0}.links a{padding:.7rem 1rem;border-radius:8px;background:#176b87;color:white;text-decoration:none}.links a:hover{background:#12556c}section{padding:1.25rem;margin:1rem 0;background:white;border:1px solid #dce5ef;border-radius:10px}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore an educational healthcare claims analytics dashboard and synthetic-data project.">
+  <title>Healthcare Claims Intelligence</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "DM Sans", "Segoe UI", Arial, sans-serif;
+      color: #172b4d;
+      background: #f4f7fb;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; line-height: 1.65; }
+    main { width: min(960px, calc(100% - 32px)); margin: 64px auto; }
+    .eyebrow { color: #126b72; font-size: .8rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { max-width: 760px; margin: 12px 0; font-size: clamp(2.35rem, 7vw, 4.5rem); line-height: 1.06; letter-spacing: -.045em; }
+    .intro { max-width: 720px; color: #52647c; font-size: 1.15rem; }
+    .links { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0 38px; }
+    .links a { padding: 11px 16px; border: 1px solid #126b72; border-radius: 9px; color: #126b72; background: #fff; font-weight: 650; text-decoration: none; }
+    .links a.primary { color: #fff; background: #126b72; }
+    .links a:focus-visible { outline: 3px solid #e6ad48; outline-offset: 3px; }
+    section { margin: 18px 0; padding: 22px; border: 1px solid #e0e8f0; border-radius: 13px; background: #fff; }
+    h2 { margin: 0 0 8px; font-size: 1.2rem; }
+    section p { margin: 0; color: #52647c; }
+    footer { margin-top: 28px; color: #617186; font-size: .92rem; }
+    @media (max-width: 560px) {
+      main { margin: 36px auto; }
+      .links { flex-direction: column; }
+      .links a { text-align: center; }
+      section { padding: 18px; }
+    }
+  </style>
 </head>
 <body>
-<p>DATA ANALYTICS PROJECT</p>
-<h1>Healthcare &amp; Insurance Analytics</h1>
-<p>An educational project exploring synthetic healthcare insurance claims and billing records using Python, data analysis, and machine learning.</p>
-<nav class="links" aria-label="Project resources">
-<a href="PappuRameshBaraf_HealthcareInsuranceAnalytics.ipynb">View Jupyter notebook</a>
-<a href="PappuRameshBaraf_ProjectReport.docx">Download project report</a>
-<a href="claims_and_billing.csv">Download dataset</a>
-<a href="README.md">Project README</a>
-</nav>
-<section><h2>About this analysis</h2><p>The notebook covers data quality, exploratory analysis, feature engineering, and a leakage-aware Paid/Denied classification example. Open the notebook on GitHub or download it to run the analysis locally.</p></section>
-<section><h2>Educational use only</h2><p>The dataset is synthetic and does not describe real patients, hospitals, or insurers. This project is not medical advice and must not be used to make insurance decisions.</p></section>
-<p>Project by Pappu Ramesh Baraf · <a href="https://github.com/PappuBaraf/AI-Driven-Healthcare-Insurance-Analytics">Source on GitHub</a></p>
+  <main>
+    <p class="eyebrow">Healthcare data analytics · educational project</p>
+    <h1>Healthcare Claims Intelligence</h1>
+    <p class="intro">
+      Explore synthetic claims, billing, payer performance, data quality and
+      model evaluation through an interactive dashboard built with Python.
+    </p>
+
+    <nav class="links" aria-label="Project links">
+      <a class="primary" href="https://ai-driven-healthcare-insurance-analytics-4dwlkx2ydzygyiwk4cjsp.streamlit.app/">Open the interactive dashboard</a>
+      <a href="PappuRameshBaraf_HealthcareInsuranceAnalytics.ipynb">Jupyter notebook</a>
+      <a href="PappuRameshBaraf_ProjectReport.docx">Project report</a>
+      <a href="data/claims_and_billing.csv">Download synthetic dataset</a>
+      <a href="README.md">Documentation</a>
+    </nav>
+
+    <section>
+      <h2>What you can explore</h2>
+      <p>
+        Review claim and payer trends, filter the dataset, inspect data-quality
+        checks, compare model metrics, and try the educational bill and policy
+        text review tools with synthetic or de-identified sample documents.
+      </p>
+    </section>
+
+    <section>
+      <h2>Data and privacy notice</h2>
+      <p>
+        The included dataset is synthetic and does not represent real patients
+        or a real healthcare organization. Do not upload personal health
+        information to the public demo. Findings are not medical, legal,
+        insurance, fraud, or coverage advice.
+      </p>
+    </section>
+
+    <footer>
+      Created by Pappu Ramesh Baraf ·
+      <a href="https://github.com/PappuBaraf/AI-Driven-Healthcare-Insurance-Analytics">View the source repository</a>
+    </footer>
+  </main>
 </body>
 </html>

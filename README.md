@@ -20,7 +20,7 @@ Conducted by **BharatCares in Association with AICTE**
 
 ## Project Description
 
-An end-to-end **AI-driven healthcare and insurance analytics application** built using Python, scikit-learn, pandas, Matplotlib and Streamlit. The project analyses 70,000 synthetic insurance claim and billing records, performs exploratory data analysis, trains a Logistic Regression model to predict claim approval (Paid / Denied), generates AI-driven operational insights and presents all findings through an 11-page interactive dashboard.
+An end-to-end **healthcare claims intelligence application** built using Python, scikit-learn, pandas, Matplotlib and Streamlit. The project analyses 70,000 synthetic insurance claim and billing records, performs exploratory data analysis, evaluates a Logistic Regression example for Paid/Denied outcomes, and presents results through a responsive interactive dashboard. The Patient & Provider Hub also provides rules-based bill review, policy-text keyword navigation, and session-only experiment/activity exports.
 
 > **Important:** The CA Hospital Dataset Q1 2025 is a **synthetic** dataset generated for educational purposes. It does not represent real patient records, real insurance claims, or any specific healthcare organisation. All findings are analytical observations only and must not be used for medical decisions or insurance policy changes.
 
@@ -91,7 +91,7 @@ An end-to-end **AI-driven healthcare and insurance analytics application** built
 ```
 Healthcare_Insurance_Analytics/
 ├── PappuRameshBaraf_HealthcareInsuranceAnalytics.ipynb  # Submission notebook
-├── app.py                   # Streamlit dashboard (11 pages)
+├── app.py                   # Streamlit dashboard and bill/policy review hub
 ├── pipeline.py              # Offline analytics & ML pipeline (12 phases)
 ├── generate_notebook.py     # Script to regenerate the .ipynb file
 ├── requirements.txt         # Python dependencies
@@ -190,17 +190,25 @@ Run all cells from top to bottom (Kernel → Restart & Run All).
 
 | Page | Description |
 |------|-------------|
-| 🏠 Executive Overview | KPIs: 70K claims, $112.9M billed, 8.57% denial rate |
-| 📂 Load Database | Upload CSV files or enter records manually |
-| 💳 Claims & Insurance | Provider analysis, monthly trends, denial reasons, billing stats |
-| 📊 Exploratory Data Analysis | All 10 EDA charts + insights + column explorer |
-| 🤖 Predictive Analytics | ML problem definition, leakage prevention, features used |
-| 📈 Model Results | Metrics, confusion matrices, classification report, predictions |
-| 💡 AI-Driven Insights | 13 auto-generated observations and operational actions |
-| 🧾 Data Dictionary | Column definitions, feature dictionary |
-| 🔍 Data Quality | Missing values, data types, cleaning report |
-| ⬇️ Export | Download all CSVs and charts |
-| 👤 About / Project Owner | Pappu Ramesh Baraf's full profile |
+| Patient & Provider Hub | De-identified bill review, repeated-line candidates, statistical outliers, arithmetic checks and policy keyword excerpts |
+| Executive Overview | Claims, billed/paid totals, denial rate and provider KPIs |
+| Claims & Insurance | Provider analysis, monthly trends, denial reasons and billing statistics |
+| Interactive Explorer | Filter by provider, outcome and billing dates; chart and download matching rows |
+| Exploratory Data Analysis | EDA charts, insights, numeric summaries and column explorer |
+| Predictive Analytics / Model Results | Leakage-aware modeling methodology, metrics, classification report and predictions |
+| Data Quality / Data Dictionary | Missing values, duplicates, data types, cleaning reports and field definitions |
+| Experiments & Testing | Dataset validation checks and available model evaluation evidence |
+| Load Data / Exports & Activity | Session uploads, manual entry, downloads and a privacy-minimized JSON activity export |
+| About the Project | Project context, limitations and owner profile |
+
+### Privacy and interpretation limits for bill review
+
+- The public Streamlit demo is educational; **do not upload identifiable patient information or protected health information**.
+- Bill checks are deterministic review aids: identical item/amount lines are only candidates, and statistical outliers are relative to the uploaded bill—not evidence of fraud, overcharging or inappropriate care.
+- Policy search returns excerpts with matching words; it does not determine coverage, benefits or reimbursement.
+- The PDF reader extracts selectable text only; scanned-image OCR is not included.
+- Uploaded documents are not intentionally written to project files. Activity export contains generic events and aggregate counts only, remains in the current Streamlit session, and is not a persistent visitor log. Hosting providers may process requests under their own terms.
+- No third-party LLM is called and no API key is required. Never put an API key in the repository or a public notebook.
 
 ---
 

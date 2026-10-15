@@ -17,14 +17,19 @@ IMPORTANT:
 """
 
 from pathlib import Path
+from io import BytesIO
 import json
+import re
+import unicodedata
 import warnings
+from datetime import date, datetime, timezone
 
 import numpy as np
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+from pypdf import PdfReader
 
 warnings.filterwarnings("ignore")
 
@@ -42,10 +47,75 @@ REPS   = OUT  / "reports"
 # Page config
 # -----------------------------------------------------------------------
 st.set_page_config(
-    page_title="Healthcare & Insurance Analytics | Pappu Ramesh Baraf",
-    page_icon="🏥",
+    page_title="Healthcare Claims Intelligence | Pappu Ramesh Baraf",
+    page_icon="H",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
+)
+
+st.markdown(
+    """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+:root {
+  --ink: #172b4d;
+  --muted: #5b6b82;
+  --brand: #126b72;
+  --brand-dark: #0b4b59;
+  --surface: #ffffff;
+  --canvas: #f4f7fb;
+}
+html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
+.stApp { background: var(--canvas); color: var(--ink); }
+[data-testid="stHeader"] { background: rgba(244,247,251,.88); }
+[data-testid="stAppViewContainer"] .main .block-container {
+  max-width: 1440px;
+  padding: clamp(1rem, 3vw, 2.5rem) clamp(.85rem, 3vw, 2.75rem) 3rem;
+}
+h1, h2, h3 { font-family: 'Manrope', sans-serif !important; color: var(--ink); letter-spacing: -.025em; }
+h1 { font-size: clamp(1.7rem, 4vw, 2.65rem) !important; }
+h2, h3 { font-size: clamp(1.15rem, 2.4vw, 1.55rem) !important; }
+[data-testid="stMetric"] {
+  min-height: 108px;
+  padding: 16px 18px;
+  border: 1px solid #e2eaf1;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 4px 16px rgba(17, 46, 70, .045);
+}
+[data-testid="stMetricLabel"] { color: var(--muted); font-weight: 600; }
+[data-testid="stMetricValue"] { color: var(--brand-dark); font-family: 'Manrope', sans-serif; }
+[data-testid="stDataFrame"], [data-testid="stTable"] {
+  border: 1px solid #e2eaf1;
+  border-radius: 12px;
+  overflow: hidden;
+}
+[data-testid="stTabs"] button[role="tab"] { font-weight: 600; }
+[data-testid="stSidebar"] { background: #fff; border-right: 1px solid #e4ebf2; }
+div.stButton > button, div.stDownloadButton > button, button[kind="primary"] {
+  min-height: 2.65rem;
+  border-radius: 9px;
+  font-weight: 650;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+div.stButton > button:hover, div.stDownloadButton > button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 14px rgba(18,107,114,.15);
+}
+@media (max-width: 700px) {
+  [data-testid="stAppViewContainer"] .main .block-container { padding: 1rem .8rem 2rem; }
+  [data-testid="stMetric"] { min-height: 90px; padding: 12px; }
+  [data-testid="stMetricValue"] { font-size: 1.28rem; }
+  [data-testid="stHorizontalBlock"] { gap: .55rem; }
+  [data-testid="stTabs"] button[role="tab"] { padding: .45rem .55rem; font-size: .82rem; }
+  [data-testid="stDataFrame"] { font-size: .82rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+}
+</style>
+""",
+    unsafe_allow_html=True,
 )
 
 # -----------------------------------------------------------------------
@@ -130,7 +200,85 @@ def add_download(df, label, filename):
             data=df.to_csv(index=False).encode("utf-8"),
             file_name=filename,
             mime="text/csv",
+            on_click=record_activity,
+            args=("download_csv", {"artifact": filename}),
         )
+
+
+def record_activity(action, details=None):
+    """Record privacy-safe events in this visitor's current Streamlit session."""
+    events = st.session_state.setdefault("activity_log", [])
+    events.append({
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "action": action,
+        "details": details or {},
+    })
+    del events[:-100]
+
+
+def normalize_audit_text(value):
+    text = unicodedata.normalize("NFKD", str(value)).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def extract_document_text(uploaded_file, max_bytes=5_000_000):
+    content = uploaded_file.getvalue()
+    if len(content) > max_bytes:
+        raise ValueError(f"{uploaded_file.name} exceeds the {max_bytes // 1_000_000} MB limit.")
+    suffix = Path(uploaded_file.name).suffix.lower()
+    if suffix == ".pdf":
+        reader = PdfReader(BytesIO(content))
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        if not text.strip():
+            raise ValueError(
+                "No selectable text was found in this PDF. Scanned-image OCR is not enabled."
+            )
+    elif suffix == ".txt":
+        text = content.decode("utf-8-sig", errors="replace")
+    else:
+        raise ValueError("Choose a PDF or plain-text document.")
+    return text[:100_000]
+
+
+def detect_bill_columns(columns, candidates):
+    lowered = {str(column).lower().strip(): column for column in columns}
+    for candidate in candidates:
+        if candidate in lowered:
+            return lowered[candidate]
+    for normalized, original in lowered.items():
+        if any(candidate in normalized for candidate in candidates):
+            return original
+    return None
+
+
+def make_policy_matches(policy_text, descriptions, limit=8):
+    matches = []
+    policy_lower = policy_text.lower()
+    common_words = {
+        "about", "after", "before", "claim", "charge", "cost", "from",
+        "hospital", "medical", "other", "patient", "service", "under",
+        "with", "your",
+    }
+    for description in descriptions:
+        terms = [
+            term for term in normalize_audit_text(description).split()
+            if len(term) >= 4 and term not in common_words
+        ]
+        if not terms:
+            continue
+        matched_term = next((term for term in terms if term in policy_lower), None)
+        if matched_term:
+            position = policy_lower.find(matched_term)
+            start = max(0, position - 180)
+            end = min(len(policy_text), position + len(matched_term) + 220)
+            matches.append({
+                "Bill item": str(description)[:120],
+                "Matched term": matched_term,
+                "Policy excerpt": " ".join(policy_text[start:end].split()),
+            })
+        if len(matches) >= limit:
+            break
+    return matches
 
 
 # -----------------------------------------------------------------------
@@ -153,15 +301,39 @@ cr_df           = load_output("classification_report.csv")
 
 PIPELINE_RUN = model_summary is not None
 
+if "activity_log" not in st.session_state:
+    st.session_state["activity_log"] = []
+    record_activity("session_started")
+
 # -----------------------------------------------------------------------
 # Header
 # -----------------------------------------------------------------------
-st.title("🏥 AI-Driven Healthcare & Insurance Analytics")
+st.title("Healthcare Claims Intelligence")
 st.caption(
-    "Patient Data • Insurance Claims • Medical Outcomes • "
-    "EDA • Predictive Analytics • AI-Driven Insights  |  "
-    "IBM SkillsBuild Data Analytics with AI Internship"
+    "Claims, billing and payer performance analytics · IBM SkillsBuild Data Analytics with AI"
 )
+
+page_names = [
+    "Patient & Provider Hub",
+    "Executive Overview",
+    "Claims & Insurance",
+    "Interactive Explorer",
+    "Exploratory Data Analysis",
+    "Predictive Analytics",
+    "Model Results",
+    "AI-Driven Insights",
+    "Data Dictionary",
+    "Data Quality",
+    "Experiments & Testing",
+    "Load Data",
+    "Exports & Activity",
+    "About the Project",
+]
+
+if st.session_state.get("last_page") != st.session_state.get("app_page"):
+    page_for_event = st.session_state.get("app_page", page_names[0])
+    record_activity("page_view", {"page": page_for_event})
+    st.session_state["last_page"] = page_for_event
 
 if not PIPELINE_RUN:
     st.error(
@@ -170,7 +342,7 @@ if not PIPELINE_RUN:
     )
 
 st.info(
-    "📌 This dashboard uses the **CA Hospital Dataset – Q1 2025** (synthetic data). "
+    "This dashboard uses the **CA Hospital Dataset – Q1 2025** (synthetic data). "
     "All patterns shown are analytical observations. "
     "No medical diagnoses or causal conclusions are claimed."
 )
@@ -179,51 +351,348 @@ st.info(
 # Sidebar
 # -----------------------------------------------------------------------
 with st.sidebar:
-    st.header("⚙️ Navigation")
-    if st.button("🔄 Reload Data"):
+    st.header("Explore the analysis")
+    if st.button("Reload data"):
         st.cache_data.clear()
         st.rerun()
 
     page = st.radio(
-        "Go to page",
-        [
-            "🏠 Executive Overview",
-            "📂 Load Database",
-            "💳 Claims & Insurance",
-            "📊 Exploratory Data Analysis",
-            "🤖 Predictive Analytics",
-            "📈 Model Results",
-            "💡 AI-Driven Insights",
-            "🧾 Data Dictionary",
-            "🔍 Data Quality",
-            "⬇️ Export",
-            "👤 About / Project Owner",
-        ],
+        "Dashboard section",
+        page_names,
+        key="app_page",
     )
 
     st.divider()
     if claims_raw is not None:
         st.metric("Dataset Rows", f"{len(claims_raw):,}")
         st.metric("Tables Loaded", len(tables))
-    st.caption("Synthetic dataset — educational use only")
+    st.caption("Synthetic data · educational use only")
 
     # ── Project Owner Card ──
     st.divider()
-    st.markdown("**👨‍💻 Project Owner**")
+    st.markdown("**Project owner**")
     st.markdown(f"**{OWNER['name']}**")
     st.markdown(f"*{OWNER['title']}*")
-    st.markdown(f"📍 {OWNER['location']}")
-    st.markdown(f"✉️ {OWNER['email']}")
+    st.markdown(OWNER["location"])
+    st.markdown(OWNER["email"])
     st.markdown(
-        f"[🔗 LinkedIn]({OWNER['linkedin']})  ·  [🐙 GitHub]({OWNER['github']})"
+        f"[LinkedIn]({OWNER['linkedin']})  ·  [GitHub]({OWNER['github']})"
     )
     st.caption(OWNER["degree"])
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# PAGE 0 — PATIENT & PROVIDER HUB
+# ═══════════════════════════════════════════════════════════════════════
+if page == "Patient & Provider Hub":
+    st.subheader("Bill & Policy Review")
+    st.write(
+        "Review de-identified bill line items for repeated charges, unusual amounts, "
+        "and arithmetic mismatches. Search an insurance policy for related wording "
+        "to help you prepare questions for the provider or insurer."
+    )
+    st.warning(
+        "Privacy and safety: this is an educational review tool, not an insurer, "
+        "medical service, fraud detector, or coverage decision. Use synthetic or "
+        "de-identified documents only. Do not upload real patient records, names, "
+        "dates of birth, member IDs, account numbers, or other protected health information. "
+        "Files are processed by this hosted app; do not treat the public demo as a "
+        "private or compliant health-record system."
+    )
+
+    with st.expander("How this review works", expanded=True):
+        st.markdown(
+            """
+            1. Upload a de-identified bill as a CSV with one charge per row. A PDF or
+               text bill can also be reviewed for repeated text lines when its text is selectable.
+            2. Optionally upload a policy PDF or text file. The app finds keyword
+               excerpts; it does **not** decide whether a service is covered.
+            3. Review the checks, download the findings, and verify any question with
+               the billing office or insurer before taking action.
+
+            No AI provider or API key is required. No external AI service is called.
+            """
+        )
+
+    consent = st.checkbox(
+        "I will only upload synthetic or de-identified documents and understand this is not a coverage or fraud determination.",
+        key="audit_privacy_confirmed",
+    )
+    if not consent:
+        st.info("Confirm the privacy notice above to enable document review.")
+    else:
+        bill_file = st.file_uploader(
+            "Bill line items (CSV recommended; PDF/TXT supported for text review)",
+            type=["csv", "pdf", "txt"],
+            key="bill_audit_upload",
+            help="CSV: one charge per row. Up to 10 MB and 20,000 rows. Documents: up to 5 MB.",
+        )
+        policy_file = st.file_uploader(
+            "Optional insurance policy (PDF or TXT)",
+            type=["pdf", "txt"],
+            key="policy_audit_upload",
+            help="Only policy word-search and short matching excerpts are shown. Up to 5 MB.",
+        )
+
+        policy_text = ""
+        if policy_file is not None:
+            try:
+                policy_text = extract_document_text(policy_file)
+                st.success(f"Policy text extracted: {len(policy_text):,} characters.")
+            except (ValueError, OSError) as exc:
+                st.error(f"Could not read policy document: {exc}")
+            except Exception as exc:
+                st.error(f"Policy document parsing failed: {exc}")
+
+        if bill_file is not None:
+            suffix = Path(bill_file.name).suffix.lower()
+            try:
+                if suffix == ".csv":
+                    bill_bytes = bill_file.getvalue()
+                    if len(bill_bytes) > 10_000_000:
+                        raise ValueError("CSV exceeds the 10 MB limit.")
+                    bill_df = pd.read_csv(BytesIO(bill_bytes), low_memory=False)
+                    if bill_df.empty:
+                        raise ValueError("The CSV contains no bill rows.")
+                    if len(bill_df) > 20_000:
+                        raise ValueError("CSV exceeds the 20,000-row review limit.")
+                    if len(bill_df.columns) > 100:
+                        raise ValueError("CSV exceeds the 100-column review limit.")
+
+                    st.markdown("#### Map bill columns")
+                    columns = bill_df.columns.tolist()
+                    optional = ["(none)"] + columns
+                    amount_guess = detect_bill_columns(
+                        columns, ["line_amount", "line_total", "amount", "charge", "total"]
+                    )
+                    description_guess = detect_bill_columns(
+                        columns, ["description", "service", "procedure", "item", "charge_description"]
+                    )
+                    code_guess = detect_bill_columns(
+                        columns, ["cpt_code", "hcpcs_code", "procedure_code", "code"]
+                    )
+                    quantity_guess = detect_bill_columns(columns, ["quantity", "units", "unit_count"])
+                    price_guess = detect_bill_columns(
+                        columns, ["unit_price", "price_per_unit", "rate", "unit_cost"]
+                    )
+                    mapping_cols = st.columns(2)
+                    with mapping_cols[0]:
+                        description_col = st.selectbox(
+                            "Service / item description",
+                            optional,
+                            index=optional.index(description_guess) if description_guess else 0,
+                            key="bill_description_col",
+                        )
+                        amount_col = st.selectbox(
+                            "Line charge amount",
+                            columns,
+                            index=columns.index(amount_guess) if amount_guess else 0,
+                            key="bill_amount_col",
+                        )
+                        code_col = st.selectbox(
+                            "Optional billing code",
+                            optional,
+                            index=optional.index(code_guess) if code_guess else 0,
+                            key="bill_code_col",
+                        )
+                    with mapping_cols[1]:
+                        quantity_col = st.selectbox(
+                            "Optional quantity / units",
+                            optional,
+                            index=optional.index(quantity_guess) if quantity_guess else 0,
+                            key="bill_quantity_col",
+                        )
+                        unit_price_col = st.selectbox(
+                            "Optional price per unit",
+                            optional,
+                            index=optional.index(price_guess) if price_guess else 0,
+                            key="bill_unit_price_col",
+                        )
+
+                    st.caption("Column mapping is used only for this review; the uploaded file is not modified.")
+                    amounts = pd.to_numeric(bill_df[amount_col], errors="coerce")
+                    descriptions = (
+                        bill_df[description_col].fillna("").astype(str)
+                        if description_col != "(none)"
+                        else pd.Series(["Unlabeled charge"] * len(bill_df), index=bill_df.index)
+                    )
+                    normalized = descriptions.map(normalize_audit_text)
+                    duplicate_keys = pd.DataFrame({
+                        "normalized_item": normalized,
+                        "amount": amounts.round(2),
+                    })
+                    if code_col != "(none)":
+                        duplicate_keys["code"] = bill_df[code_col].fillna("").astype(str).str.strip().str.lower()
+                    duplicate_mask = duplicate_keys.duplicated(keep=False) & normalized.ne("") & amounts.notna()
+                    duplicate_rows = bill_df.loc[duplicate_mask].copy()
+                    duplicate_rows.insert(0, "Source row", duplicate_rows.index + 2)
+                    duplicate_rows["Review note"] = "Repeated item and charge; confirm these are separate services."
+                    duplicate_total = (
+                        duplicate_keys.loc[duplicate_mask]
+                        .groupby(list(duplicate_keys.columns), dropna=False)["amount"]
+                        .apply(lambda values: values.iloc[0] * (len(values) - 1))
+                        .sum()
+                    ) if duplicate_mask.any() else 0.0
+
+                    st.markdown("#### Bill review summary")
+                    valid_amounts = amounts.dropna()
+                    metric_cols = st.columns(4)
+                    metric_cols[0].metric("Line items", f"{len(bill_df):,}")
+                    metric_cols[1].metric("Total listed charges", f"${valid_amounts.sum():,.2f}")
+                    metric_cols[2].metric("Repeated-charge candidates", f"{int(duplicate_mask.sum()):,}")
+                    metric_cols[3].metric("Possible repeated amount", f"${duplicate_total:,.2f}")
+
+                    if duplicate_mask.any():
+                        st.warning(
+                            "Repeated descriptions and amounts are candidates for review, "
+                            "not proof of duplicate billing. Separate services can legitimately match."
+                        )
+                        st.dataframe(duplicate_rows, use_container_width=True, hide_index=True)
+                    else:
+                        st.success("No exact repeated description-and-amount candidates were found.")
+
+                    if len(valid_amounts) >= 4:
+                        q1, q3 = valid_amounts.quantile([0.25, 0.75])
+                        iqr = q3 - q1
+                        if iqr > 0:
+                            high_threshold = q3 + 1.5 * iqr
+                            high_rows = bill_df.loc[amounts > high_threshold].copy()
+                            if not high_rows.empty:
+                                high_rows.insert(0, "Source row", high_rows.index + 2)
+                                high_rows["Review note"] = (
+                                    f"Above this bill's statistical review threshold (${high_threshold:,.2f}); "
+                                    "not compared with market prices."
+                                )
+                                st.markdown("#### Statistically high line amounts")
+                                st.dataframe(high_rows, use_container_width=True, hide_index=True)
+                            else:
+                                st.success("No line amounts exceeded this bill's outlier review threshold.")
+                        else:
+                            st.info("Outlier review skipped because charge amounts have no interquartile spread.")
+                    else:
+                        st.info("Outlier review needs at least four valid line amounts.")
+
+                    if quantity_col != "(none)" and unit_price_col != "(none)":
+                        quantity = pd.to_numeric(bill_df[quantity_col], errors="coerce")
+                        unit_price = pd.to_numeric(bill_df[unit_price_col], errors="coerce")
+                        arithmetic_mask = (
+                            quantity.notna() & unit_price.notna() & amounts.notna()
+                            & ((quantity * unit_price - amounts).abs() > 0.01)
+                        )
+                        if arithmetic_mask.any():
+                            arithmetic_rows = bill_df.loc[arithmetic_mask].copy()
+                            arithmetic_rows.insert(0, "Source row", arithmetic_rows.index + 2)
+                            arithmetic_rows["Calculated amount"] = (
+                                quantity.loc[arithmetic_mask] * unit_price.loc[arithmetic_mask]
+                            ).round(2)
+                            st.markdown("#### Quantity × unit-price differences")
+                            st.dataframe(arithmetic_rows, use_container_width=True, hide_index=True)
+                        else:
+                            st.success("Quantity × unit-price arithmetic matches on all comparable rows.")
+
+                    bill_report = bill_df.copy()
+                    bill_report["audit_repeated_item_and_amount"] = duplicate_mask
+                    bill_report["audit_amount_outlier"] = (
+                        amounts > high_threshold if len(valid_amounts) >= 4 and iqr > 0
+                        else False
+                    )
+                    add_download(
+                        bill_report,
+                        "Download reviewed bill rows (CSV)",
+                        "bill_review_findings.csv",
+                    )
+                    if st.button("Save review summary to session activity", key="save_bill_review"):
+                        record_activity(
+                            "bill_review",
+                            {
+                                "rows": int(len(bill_df)),
+                                "repeated_charge_candidates": int(duplicate_mask.sum()),
+                                "amount_outliers": int(
+                                    (amounts > high_threshold).sum()
+                                    if len(valid_amounts) >= 4 and iqr > 0 else 0
+                                ),
+                            },
+                        )
+                        st.success("Review summary saved to this session's activity.")
+
+                    if policy_text and description_col != "(none)":
+                        st.markdown("#### Policy wording related to bill items")
+                        policy_matches = make_policy_matches(
+                            policy_text, descriptions.dropna().unique()
+                        )
+                        if policy_matches:
+                            st.dataframe(
+                                pd.DataFrame(policy_matches),
+                                use_container_width=True,
+                                hide_index=True,
+                            )
+                            st.caption(
+                                "Keyword overlap only. A matching excerpt does not confirm coverage, "
+                                "medical necessity, benefits, or reimbursement."
+                            )
+                        else:
+                            st.info(
+                                "No clear keyword excerpts found for the selected descriptions. "
+                                "This does not mean the policy excludes the services."
+                            )
+                else:
+                    extracted_bill_text = extract_document_text(bill_file)
+                    st.info(
+                        "Text was extracted from this document. PDF/text line parsing is limited: "
+                        "repeated text may include page headers or other legitimate repeated wording. "
+                        "For amount and arithmetic checks, export the bill line items to CSV."
+                    )
+                    lines = [
+                        (index + 1, line.strip())
+                        for index, line in enumerate(extracted_bill_text.splitlines())
+                        if len(normalize_audit_text(line)) >= 16
+                    ]
+                    line_frame = pd.DataFrame(lines, columns=["Document line", "Extracted text"])
+                    if not line_frame.empty:
+                        line_frame["Normalized text"] = line_frame["Extracted text"].map(normalize_audit_text)
+                        repeated = line_frame[
+                            line_frame["Normalized text"].duplicated(keep=False)
+                        ].drop(columns=["Normalized text"])
+                        if not repeated.empty:
+                            st.markdown("#### Repeated text lines to review")
+                            st.dataframe(repeated, use_container_width=True, hide_index=True)
+                        else:
+                            st.success("No repeated document text lines were found.")
+                    st.text_area(
+                        "Extracted document text",
+                        extracted_bill_text,
+                        height=300,
+                        disabled=True,
+                    )
+                    if policy_text:
+                        matches = make_policy_matches(policy_text, [extracted_bill_text[:500]])
+                        st.markdown("#### Related policy wording")
+                        if matches:
+                            st.dataframe(pd.DataFrame(matches), use_container_width=True, hide_index=True)
+                        else:
+                            st.info("No keyword excerpts matched; this is not a coverage decision.")
+                    if st.button("Save document review to session activity", key="save_pdf_review"):
+                        record_activity("bill_document_review", {"format": suffix[1:]})
+                        st.success("Document review saved to this session's activity.")
+            except (ValueError, pd.errors.ParserError, UnicodeDecodeError, OSError) as exc:
+                st.error(f"Could not review bill document: {exc}")
+            except Exception as exc:
+                st.error(f"Bill review failed: {exc}")
+
+    st.divider()
+    st.markdown("### What to ask next")
+    st.markdown(
+        "- Ask the billing office to explain any repeated line, unit count, or charge that you cannot reconcile.\n"
+        "- Ask your insurer to identify the exact policy section and benefit rules that apply.\n"
+        "- Keep the bill, explanation of benefits, and policy wording together when requesting a review.\n"
+        "- Do not treat statistical outliers as proof of error, fraud, or inappropriate care."
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # PAGE 1 — EXECUTIVE OVERVIEW
 # ═══════════════════════════════════════════════════════════════════════
-if page == "🏠 Executive Overview":
+if page == "Executive Overview":
     st.subheader("Executive Overview")
 
     if claims_raw is not None:
@@ -285,7 +754,7 @@ if page == "🏠 Executive Overview":
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE 2 — LOAD DATABASE
 # ═══════════════════════════════════════════════════════════════════════
-elif page == "📂 Load Database":
+elif page == "Load Data":
     st.subheader("Load Database — Manage Data Sources")
 
     st.info(
@@ -448,7 +917,7 @@ elif page == "📂 Load Database":
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE 3 — CLAIMS & INSURANCE
 # ═══════════════════════════════════════════════════════════════════════
-elif page == "💳 Claims & Insurance":
+elif page == "Claims & Insurance":
     st.subheader("Claims & Insurance Analytics")
 
     if claims_raw is None:
@@ -556,7 +1025,120 @@ elif page == "💳 Claims & Insurance":
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE 3 — EDA
 # ═══════════════════════════════════════════════════════════════════════
-elif page == "📊 Exploratory Data Analysis":
+elif page == "Interactive Explorer":
+    st.subheader("Interactive claims explorer")
+    st.write(
+        "Filter the synthetic claims dataset, compare payer and claim outcomes, "
+        "and export the exact rows used in this exploration."
+    )
+    if claims_raw is None:
+        st.error("The claims dataset is not available.")
+        st.stop()
+
+    explorer = claims_raw.copy()
+    date_col = "claim_billing_date"
+    explorer[date_col] = pd.to_datetime(
+        explorer[date_col], format="%d-%m-%Y %H:%M", errors="coerce"
+    )
+    filter_cols = st.columns(3)
+    providers = sorted(explorer["insurance_provider"].dropna().astype(str).unique())
+    statuses = sorted(explorer["claim_status"].dropna().astype(str).unique())
+    with filter_cols[0]:
+        selected_providers = st.multiselect(
+            "Insurance providers", providers, default=providers, key="explorer_providers"
+        )
+    with filter_cols[1]:
+        selected_statuses = st.multiselect(
+            "Claim outcomes", statuses, default=statuses, key="explorer_statuses"
+        )
+    with filter_cols[2]:
+        date_values = explorer[date_col].dropna()
+        if date_values.empty:
+            start_date, end_date = None, None
+            st.caption("No valid billing dates are available to filter.")
+        else:
+            start_date, end_date = st.date_input(
+                "Billing date range",
+                value=(date_values.min().date(), date_values.max().date()),
+                min_value=date_values.min().date(),
+                max_value=date_values.max().date(),
+                key="explorer_dates",
+            )
+
+    filtered = explorer[
+        explorer["insurance_provider"].astype(str).isin(selected_providers)
+        & explorer["claim_status"].astype(str).isin(selected_statuses)
+    ].copy()
+    if start_date is not None and end_date is not None:
+        filtered = filtered[
+            filtered[date_col].isna()
+            | filtered[date_col].dt.date.between(start_date, end_date)
+        ]
+
+    if st.button("Save this experiment to session activity", type="primary"):
+        record_activity(
+            "experiment_saved",
+            {
+                "rows": int(len(filtered)),
+                "providers": selected_providers,
+                "statuses": selected_statuses,
+                "date_start": start_date.isoformat() if start_date else None,
+                "date_end": end_date.isoformat() if end_date else None,
+            },
+        )
+        st.success("Experiment settings recorded in this browser session only.")
+
+    if filtered.empty:
+        st.warning("No claims match these filters. Adjust the selections to continue.")
+    else:
+        total_rows = len(filtered)
+        denial_rate = filtered["claim_status"].eq("Denied").mean() * 100
+        billed_total = filtered["billed_amount"].sum()
+        paid_total = filtered["paid_amount"].sum()
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Filtered claims", f"{total_rows:,}")
+        k2.metric("Denial rate", f"{denial_rate:.2f}%")
+        k3.metric("Billed", f"${billed_total:,.0f}")
+        k4.metric("Paid", f"${paid_total:,.0f}")
+
+        st.markdown("### Payer comparison")
+        payer_summary = filtered.groupby("insurance_provider").agg(
+            Claims=("claim_status", "size"),
+            Denied=("claim_status", lambda values: values.eq("Denied").sum()),
+            Billed=("billed_amount", "sum"),
+            Paid=("paid_amount", "sum"),
+        )
+        payer_summary["Denial rate (%)"] = (
+            payer_summary["Denied"] / payer_summary["Claims"] * 100
+        ).round(2)
+        chart_left, chart_right = st.columns(2)
+        with chart_left:
+            st.markdown("**Claims by payer**")
+            st.bar_chart(payer_summary[["Claims"]], use_container_width=True)
+        with chart_right:
+            st.markdown("**Denial rate by payer**")
+            st.bar_chart(payer_summary[["Denial rate (%)"]], use_container_width=True)
+
+        st.markdown("### Filtered payer metrics")
+        st.dataframe(payer_summary.round(2), use_container_width=True)
+        add_download(filtered, "Download filtered claims (CSV)", "filtered_claims.csv")
+        add_download(
+            payer_summary.reset_index(),
+            "Download payer comparison (CSV)",
+            "payer_comparison.csv",
+        )
+        st.markdown("### Matching records")
+        st.dataframe(
+            filtered.drop(columns=[date_col]).head(500),
+            use_container_width=True,
+            height=420,
+        )
+        st.caption(
+            "The table is capped at 500 preview rows; the CSV download includes every matching row."
+        )
+
+
+elif page == "Exploratory Data Analysis":
     st.subheader("Exploratory Data Analysis")
 
     st.write(
@@ -650,7 +1232,7 @@ elif page == "📊 Exploratory Data Analysis":
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE 4 — PREDICTIVE ANALYTICS
 # ═══════════════════════════════════════════════════════════════════════
-elif page == "🤖 Predictive Analytics":
+elif page == "Predictive Analytics":
     st.subheader("Predictive Analytics — Claim Denial Prediction")
 
     st.markdown(
@@ -711,7 +1293,7 @@ elif page == "🤖 Predictive Analytics":
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE 5 — MODEL RESULTS
 # ═══════════════════════════════════════════════════════════════════════
-elif page == "📈 Model Results":
+elif page == "Model Results":
     st.subheader("Model Evaluation Results")
 
     if not PIPELINE_RUN:
@@ -813,7 +1395,7 @@ elif page == "📈 Model Results":
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE 6 — AI-DRIVEN INSIGHTS
 # ═══════════════════════════════════════════════════════════════════════
-elif page == "💡 AI-Driven Insights":
+elif page == "AI-Driven Insights":
     st.subheader("AI-Driven Healthcare & Insurance Insights")
 
     st.write(
@@ -867,7 +1449,7 @@ elif page == "💡 AI-Driven Insights":
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE 7 — DATA DICTIONARY
 # ═══════════════════════════════════════════════════════════════════════
-elif page == "🧾 Data Dictionary":
+elif page == "Data Dictionary":
     st.subheader("Data Dictionary")
 
     st.markdown("### Column Definitions")
@@ -915,7 +1497,7 @@ elif page == "🧾 Data Dictionary":
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE 8 — DATA QUALITY
 # ═══════════════════════════════════════════════════════════════════════
-elif page == "🔍 Data Quality":
+elif page == "Data Quality":
     st.subheader("Data Quality Report")
 
     if claims_raw is not None:
@@ -975,13 +1557,106 @@ elif page == "🔍 Data Quality":
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE 9 — EXPORT
 # ═══════════════════════════════════════════════════════════════════════
-elif page == "⬇️ Export":
-    st.subheader("Export Project Outputs")
+elif page == "Experiments & Testing":
+    st.subheader("Data checks and model validation")
+    st.write(
+        "Run transparent checks on the loaded dataset and inspect the saved model "
+        "evaluation. These checks validate data structure and metrics; they do not "
+        "establish clinical validity or support real-world claim decisions."
+    )
+
+    if claims_raw is None:
+        st.error("The claims dataset is not available.")
+        st.stop()
+
+    required_columns = {
+        "billing_id", "patient_id", "encounter_id", "insurance_provider",
+        "payment_method", "claim_id", "claim_billing_date", "billed_amount",
+        "paid_amount", "claim_status", "denial_reason",
+    }
+    missing_columns = sorted(required_columns - set(claims_raw.columns))
+    valid_statuses = {"Paid", "Denied"}
+    unexpected_statuses = sorted(
+        set(claims_raw["claim_status"].dropna().astype(str)) - valid_statuses
+    ) if "claim_status" in claims_raw else ["claim_status column missing"]
+    negative_amounts = int(
+        (
+            claims_raw[["billed_amount", "paid_amount"]]
+            .apply(pd.to_numeric, errors="coerce")
+            .lt(0)
+            .any(axis=1)
+        ).sum()
+    ) if {"billed_amount", "paid_amount"}.issubset(claims_raw.columns) else None
+
+    checks = [
+        {
+            "Check": "Required analysis columns",
+            "Result": "PASS" if not missing_columns else "FAIL",
+            "Details": "All expected fields are present" if not missing_columns else ", ".join(missing_columns),
+        },
+        {
+            "Check": "Claim status values",
+            "Result": "PASS" if not unexpected_statuses else "FAIL",
+            "Details": "Paid and Denied only" if not unexpected_statuses else ", ".join(unexpected_statuses),
+        },
+        {
+            "Check": "Negative billed/paid amounts",
+            "Result": "PASS" if negative_amounts == 0 else "WARN",
+            "Details": f"{negative_amounts:,} rows" if negative_amounts is not None else "Amount columns missing",
+        },
+        {
+            "Check": "Duplicate claim rows",
+            "Result": "PASS" if not claims_raw.duplicated().any() else "WARN",
+            "Details": f"{int(claims_raw.duplicated().sum()):,} duplicate rows",
+        },
+        {
+            "Check": "Saved model evaluation",
+            "Result": "PASS" if PIPELINE_RUN and model_summary.get("roc_auc") is not None else "WARN",
+            "Details": f"ROC-AUC {model_summary['roc_auc']:.4f}" if PIPELINE_RUN and model_summary.get("roc_auc") is not None else "Model outputs not available",
+        },
+    ]
+    checks_df = pd.DataFrame(checks)
+    for _, check in checks_df.iterrows():
+        if check["Result"] == "FAIL":
+            st.error(f"{check['Check']}: {check['Details']}")
+        elif check["Result"] == "WARN":
+            st.warning(f"{check['Check']}: {check['Details']}")
+        else:
+            st.success(f"{check['Check']}: {check['Details']}")
+    st.dataframe(checks_df, use_container_width=True, hide_index=True)
+    add_download(checks_df, "Download validation checks (CSV)", "validation_checks.csv")
+
+    st.markdown("### Model evaluation evidence")
+    if model_summary:
+        model_metrics = {
+            key: model_summary.get(key)
+            for key in ("accuracy", "precision", "recall", "f1", "roc_auc")
+            if model_summary.get(key) is not None
+        }
+        st.bar_chart(pd.Series(model_metrics, name="Score").to_frame())
+        st.caption(
+            "Scores are from the included held-out evaluation. The low ROC-AUC and "
+            "class imbalance should be considered; accuracy alone is not sufficient."
+        )
+    else:
+        st.info("Model outputs are unavailable; run `python pipeline.py` locally to generate them.")
+
+
+elif page == "Exports & Activity":
+    st.subheader("Downloads and session activity")
 
     st.write(
-        "Download all generated outputs for use in your IBM SkillsBuild report and presentation. "
-        "The original Kaggle CSV files are never overwritten by this dashboard."
+        "Download the source dataset, analysis results, and validation outputs. "
+        "Session activity is held only in the current Streamlit session and is not "
+        "persisted as a visitor log."
     )
+
+    if claims_raw is not None:
+        st.markdown("### Source dataset")
+        add_download(claims_raw, "Download claims dataset (CSV)", "claims_and_billing.csv")
+        st.markdown(
+            "[Original Kaggle dataset page](https://www.kaggle.com/datasets/rajkumarpadmanabhan/ca-hospital-dataset-q1-2025)"
+        )
 
     sections = [
         ("📋 Dataset Profile",         load_output("dataset_profile.csv"),        "dataset_profile.csv"),
@@ -1017,15 +1692,33 @@ elif page == "⬇️ Export":
 
     st.divider()
     st.success(
-        "✅ All outputs generated by pipeline.py are ready for inclusion in your "
+        "Analysis outputs generated by pipeline.py are ready for inclusion in your "
         "IBM SkillsBuild internship report and presentation."
+    )
+
+    st.divider()
+    st.markdown("### Current-session activity log")
+    st.caption(
+        "Privacy note: this JSON includes only timestamps and generic page, experiment, "
+        "and download actions. It excludes visitor identity, claim identifiers, and uploaded filenames. "
+        "It lives in this session's memory and is cleared when the session ends."
+    )
+    activity = st.session_state.get("activity_log", [])
+    st.dataframe(pd.DataFrame(activity), use_container_width=True, hide_index=True)
+    st.download_button(
+        "Download session activity (JSON)",
+        data=json.dumps(activity, indent=2, ensure_ascii=False).encode("utf-8"),
+        file_name="session_activity.json",
+        mime="application/json",
+        on_click=record_activity,
+        args=("download_activity_json", {}),
     )
 
 
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE — ABOUT / PROJECT OWNER
 # ═══════════════════════════════════════════════════════════════════════
-elif page == "👤 About / Project Owner":
+elif page == "About the Project":
     st.subheader("About This Project")
 
     # ── Project Owner Card ──
@@ -1035,7 +1728,6 @@ elif page == "👤 About / Project Owner":
         st.markdown(
             """
 <div style='background:#1f2328;color:#fff;border-radius:12px;padding:24px 20px;text-align:center'>
-<div style='font-size:48px;margin-bottom:8px'>👨‍💻</div>
 <div style='font-size:18px;font-weight:800;letter-spacing:.5px'>PAPPU RAMESH BARAF</div>
 <div style='font-size:12px;color:#9ca3af;margin-top:4px'>Software Developer | AI/ML | GenAI | Data Analytics</div>
 </div>
@@ -1046,11 +1738,11 @@ elif page == "👤 About / Project Owner":
     with oc2:
         st.markdown(f"## {OWNER['name']}")
         st.markdown(f"**{OWNER['title']}**")
-        st.markdown(f"📍 {OWNER['location']}")
-        st.markdown(f"✉️ [{OWNER['email']}](mailto:{OWNER['email']})")
+        st.markdown(OWNER["location"])
+        st.markdown(f"[{OWNER['email']}](mailto:{OWNER['email']})")
         st.markdown(
-            f"[🔗 LinkedIn]({OWNER['linkedin']})   |   "
-            f"[🐙 GitHub]({OWNER['github']})"
+            f"[LinkedIn]({OWNER['linkedin']})   |   "
+            f"[GitHub]({OWNER['github']})"
         )
 
     st.markdown("---")

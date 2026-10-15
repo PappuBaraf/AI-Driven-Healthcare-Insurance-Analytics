@@ -16,6 +16,7 @@ scikit-learn==1.8.0
 
 # Interactive dashboard
 streamlit
+pypdf>=5.0,<7
 
 # Jupyter Notebook support (for .ipynb submission)
 notebook

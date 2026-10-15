@@ -22,7 +22,7 @@ import json
 import re
 import unicodedata
 import warnings
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
@@ -251,6 +251,11 @@ def detect_bill_columns(columns, candidates):
     return None
 
 
+def parse_numeric_column(values):
+    cleaned = values.astype(str).str.replace(r"[$,\s]", "", regex=True)
+    return pd.to_numeric(cleaned, errors="coerce")
+
+
 def make_policy_matches(policy_text, descriptions, limit=8):
     matches = []
     policy_lower = policy_text.lower()
@@ -337,7 +342,7 @@ if st.session_state.get("last_page") != st.session_state.get("app_page"):
 
 if not PIPELINE_RUN:
     st.error(
-        "⚠️ Pipeline outputs not found. Run `python pipeline.py` from the project folder "
+        "Pipeline outputs not found. Run `python pipeline.py` from the project folder "
         "to generate all charts, metrics and predictions before using this dashboard."
     )
 
@@ -509,8 +514,24 @@ if page == "Patient & Provider Hub":
                             key="bill_unit_price_col",
                         )
 
+                    if amount_guess is None:
+                        st.warning(
+                            "No familiar charge column name was detected. Verify that "
+                            "the selected line-charge column contains numeric amounts."
+                        )
                     st.caption("Column mapping is used only for this review; the uploaded file is not modified.")
-                    amounts = pd.to_numeric(bill_df[amount_col], errors="coerce")
+                    amounts = parse_numeric_column(bill_df[amount_col])
+                    if not amounts.notna().any():
+                        st.error(
+                            "The selected line-charge column has no readable numeric values. "
+                            "Choose a column containing amounts, such as 125.00 or $1,250.00."
+                        )
+                        st.stop()
+                    if amounts.isna().any():
+                        st.warning(
+                            f"{int(amounts.isna().sum()):,} rows have an unreadable line charge "
+                            "and will be excluded from amount checks."
+                        )
                     descriptions = (
                         bill_df[description_col].fillna("").astype(str)
                         if description_col != "(none)"
@@ -573,8 +594,8 @@ if page == "Patient & Provider Hub":
                         st.info("Outlier review needs at least four valid line amounts.")
 
                     if quantity_col != "(none)" and unit_price_col != "(none)":
-                        quantity = pd.to_numeric(bill_df[quantity_col], errors="coerce")
-                        unit_price = pd.to_numeric(bill_df[unit_price_col], errors="coerce")
+                        quantity = parse_numeric_column(bill_df[quantity_col])
+                        unit_price = parse_numeric_column(bill_df[unit_price_col])
                         arithmetic_mask = (
                             quantity.notna() & unit_price.notna() & amounts.notna()
                             & ((quantity * unit_price - amounts).abs() > 0.01)
@@ -737,10 +758,10 @@ if page == "Executive Overview":
     st.divider()
     st.markdown("### Project Analytics Scope")
     a1, a2, a3, a4 = st.columns(4)
-    a1.markdown("**💳 Claims & Billing**\n\n70,000 claim records covering payer mix, billing amounts, claim status and denial reasons")
-    a2.markdown("**📊 Exploratory Analysis**\n\n10 EDA charts revealing cost distributions, trends, and payer patterns")
-    a3.markdown("**🤖 Predictive Model**\n\nLogistic Regression to classify claim approval (Paid / Denied)")
-    a4.markdown("**💡 AI Insights**\n\nAutomatically generated operational observations and recommendations")
+    a1.markdown("**Claims & Billing**\n\n70,000 claim records covering payer mix, billing amounts, claim status and denial reasons")
+    a2.markdown("**Exploratory Analysis**\n\n10 EDA charts revealing cost distributions, trends, and payer patterns")
+    a3.markdown("**Predictive Model**\n\nLogistic Regression to classify claim outcome (Paid / Denied)")
+    a4.markdown("**Analytics Insights**\n\nAutomatically generated operational observations and recommendations")
 
     st.divider()
     st.markdown("### Important Interpretation Guidance")
@@ -765,7 +786,7 @@ elif page == "Load Data":
 
     # ── Tab 1: CSV Upload  |  Tab 2: Manual Entry  |  Tab 3: Current Data ──
     tab_up, tab_manual, tab_current = st.tabs(
-        ["⬆️ Upload CSV Files", "✏️ Manual Data Entry", "📋 Current Loaded Data"]
+        ["Upload CSV files", "Manual data entry", "Current loaded data"]
     )
 
     # ------------------------------------------------------------------
@@ -789,7 +810,7 @@ elif page == "Load Data":
             for uf in uploaded_files:
                 try:
                     df_up = pd.read_csv(uf, low_memory=False)
-                    st.success(f"✅ Loaded **{uf.name}** — {len(df_up):,} rows × {len(df_up.columns)} columns")
+                    st.success(f"Loaded **{uf.name}** — {len(df_up):,} rows × {len(df_up.columns)} columns")
                     st.markdown(f"#### Preview: {uf.name}")
                     st.dataframe(df_up.head(20), use_container_width=True)
 
@@ -805,7 +826,7 @@ elif page == "Load Data":
                     st.markdown("##### Column Profile")
                     st.dataframe(pd.DataFrame(col_info), use_container_width=True)
 
-                    add_download(df_up, f"⬇️ Download {uf.name}", uf.name)
+                    add_download(df_up, f"Download {uf.name}", uf.name)
 
                 except Exception as exc:
                     st.error(f"Could not read {uf.name}: {exc}")
@@ -866,7 +887,7 @@ elif page == "Load Data":
                     disabled=(m_status == "Paid"),
                 )
 
-            submitted = st.form_submit_button("➕ Add Record to Session")
+            submitted = st.form_submit_button("Add record to session")
 
         if submitted:
             new_row = {
@@ -883,10 +904,10 @@ elif page == "Load Data":
                 "denial_reason":       m_denial if m_status == "Denied" else None,
             }
             new_df = pd.DataFrame([new_row])
-            st.success("✅ Record added to session preview below.")
+            st.success("Record added to the session preview below.")
             st.markdown("#### New Record Preview")
             st.dataframe(new_df, use_container_width=True)
-            add_download(new_df, "⬇️ Download This Record", "manual_claim_entry.csv")
+            add_download(new_df, "Download this record", "manual_claim_entry.csv")
 
             st.info(
                 "To permanently add this record to the dataset, "
@@ -911,7 +932,7 @@ elif page == "Load Data":
                     c3.metric("Duplicates", f"{df.duplicated().sum():,}")
                     c4.metric("Missing",    f"{df.isna().sum().sum():,}")
                     st.dataframe(df.head(50), use_container_width=True)
-                    add_download(df, f"⬇️ Download {tname}", f"{tname}.csv")
+                    add_download(df, f"Download {tname}", f"{tname}.csv")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -997,7 +1018,7 @@ elif page == "Claims & Insurance":
         st.dataframe(dr_counts, use_container_width=True)
 
         st.info(
-            "⚠️ **Leakage Note:** `denial_reason` is only populated **after** a claim is denied. "
+            "**Leakage note:** `denial_reason` is only populated **after** a claim is denied. "
             "It was **excluded** from all ML features to prevent target leakage."
         )
 
@@ -1019,7 +1040,7 @@ elif page == "Claims & Insurance":
     st.divider()
     st.markdown("### Raw Claims Data")
     st.dataframe(cb.head(500), use_container_width=True)
-    add_download(cb, "⬇️ Download Claims Data", "claims_and_billing.csv")
+    add_download(cb, "Download claims data", "claims_and_billing.csv")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1189,10 +1210,10 @@ elif page == "Exploratory Data Analysis":
     st.markdown("### EDA Insights (from pipeline)")
     if eda_insights_df is not None:
         for _, row in eda_insights_df.iterrows():
-            with st.expander(f"📋 {row['Section']} — {row['Question']}"):
+            with st.expander(f"{row['Section']} — {row['Question']}"):
                 st.write(f"**Observation:** {row['Observation']}")
                 st.write(f"**Possible Insight:** {row['Possible Insight']}")
-                st.info(f"⚠️ Limitation: {row['Limitation']}")
+                st.info(f"Limitation: {row['Limitation']}")
     else:
         st.info("Run pipeline.py to generate EDA insights.")
 
@@ -1241,7 +1262,7 @@ elif page == "Predictive Analytics":
     )
 
     st.markdown("### ML Problem Definition")
-    with st.expander("🎯 Target Variable", expanded=True):
+    with st.expander("Target variable", expanded=True):
         st.markdown(
             "- **Target:** `claim_status` (binary: `Paid` or `Denied`)\n"
             "- **Class distribution:** 64,002 Paid (91.4%) / 5,998 Denied (8.6%)\n"
@@ -1249,7 +1270,7 @@ elif page == "Predictive Analytics":
             "- **Primary metric:** ROC-AUC (more informative than accuracy for imbalanced data)"
         )
 
-    with st.expander("🔒 Leakage Prevention"):
+    with st.expander("Leakage prevention"):
         st.markdown(
             "The following columns were **excluded** from model features:\n\n"
             "| Column | Reason |\n"
@@ -1262,7 +1283,7 @@ elif page == "Predictive Analytics":
             "| `encounter_id` | Identifier — no predictive signal |\n"
         )
 
-    with st.expander("✅ Features Used"):
+    with st.expander("Features used"):
         if model_summary:
             for f in model_summary["features_used"]:
                 st.write(f"- `{f}`")
@@ -1275,7 +1296,7 @@ elif page == "Predictive Analytics":
     st.markdown("### Feature Selection Table")
     if ml_feat_df is not None:
         st.dataframe(ml_feat_df, use_container_width=True)
-        add_download(ml_feat_df, "⬇️ Download Feature Selection", "ml_feature_selection.csv")
+        add_download(ml_feat_df, "Download feature selection", "ml_feature_selection.csv")
 
     st.divider()
     st.markdown("### Model Architecture")
@@ -1312,7 +1333,7 @@ elif page == "Model Results":
     m5.metric("ROC-AUC",   f"{ms['roc_auc']:.4f}")
 
     st.info(
-        "ℹ️ **Interpretation:** The default-weight model achieves 91.4% accuracy by predicting "
+        "**Interpretation:** The default-weight model achieves 91.4% accuracy by predicting "
         "nearly all claims as 'Paid' (matching the majority class distribution). "
         "**ROC-AUC of 0.58** is the meaningful discriminative metric — it is modestly above "
         "random (0.50) but confirms that the selected pre-outcome features have limited "
@@ -1322,7 +1343,7 @@ elif page == "Model Results":
     st.markdown("### Both Model Variants")
     if metrics_df is not None:
         st.dataframe(metrics_df, use_container_width=True)
-        add_download(metrics_df, "⬇️ Download Model Metrics", "model_metrics.csv")
+        add_download(metrics_df, "Download model metrics", "model_metrics.csv")
 
     st.divider()
     st.markdown("### Confusion Matrices")
@@ -1389,7 +1410,7 @@ elif page == "Model Results":
             .head(200),
             use_container_width=True,
         )
-        add_download(predictions_df, "⬇️ Download Predictions", "model_predictions.csv")
+        add_download(predictions_df, "Download predictions", "model_predictions.csv")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1443,7 +1464,7 @@ elif page == "AI-Driven Insights":
             st.write(f"**Finding:** {a}")
 
     st.divider()
-    add_download(ai_insights_df, "⬇️ Download AI Insights", "ai_insights.csv")
+    add_download(ai_insights_df, "Download analytics insights", "ai_insights.csv")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1455,7 +1476,7 @@ elif page == "Data Dictionary":
     st.markdown("### Column Definitions")
     if data_dict_df is not None:
         st.dataframe(data_dict_df, use_container_width=True)
-        add_download(data_dict_df, "⬇️ Download Data Dictionary", "data_dictionary.csv")
+        add_download(data_dict_df, "Download data dictionary", "data_dictionary.csv")
     else:
         if claims_raw is not None:
             rows = []
@@ -1486,7 +1507,7 @@ elif page == "Data Dictionary":
     st.markdown("### Feature Dictionary (Engineered Features)")
     if feat_df is not None:
         st.dataframe(feat_df, use_container_width=True)
-        add_download(feat_df, "⬇️ Download Feature Dictionary", "feature_dictionary.csv")
+        add_download(feat_df, "Download feature dictionary", "feature_dictionary.csv")
 
     st.divider()
     st.markdown("### Sample Data")
@@ -1527,7 +1548,7 @@ elif page == "Data Quality":
     st.markdown("### Cleaning Pipeline Report")
     if dq_df is not None:
         st.dataframe(dq_df, use_container_width=True)
-        add_download(dq_df, "⬇️ Download Data Quality Report", "data_quality_report.csv")
+        add_download(dq_df, "Download data quality report", "data_quality_report.csv")
     else:
         st.info("Run pipeline.py to generate the data quality report.")
 
@@ -1537,7 +1558,7 @@ elif page == "Data Quality":
         dupe_count = claims_raw.duplicated().sum()
         st.metric("Duplicate Rows", dupe_count)
         if dupe_count == 0:
-            st.success("✅ No duplicate rows detected in claims_and_billing.csv")
+            st.success("No duplicate rows detected in claims_and_billing.csv.")
 
     st.divider()
     st.markdown("### Categorical Value Cardinality")
@@ -1659,23 +1680,23 @@ elif page == "Exports & Activity":
         )
 
     sections = [
-        ("📋 Dataset Profile",         load_output("dataset_profile.csv"),        "dataset_profile.csv"),
-        ("📖 Data Dictionary",          load_output("data_dictionary.csv"),         "data_dictionary.csv"),
-        ("🔍 Data Quality Report",      load_output("data_quality_report.csv"),     "data_quality_report.csv"),
-        ("🔧 Feature Dictionary",       load_output("feature_dictionary.csv"),      "feature_dictionary.csv"),
-        ("🔒 ML Feature Selection",     load_output("ml_feature_selection.csv"),    "ml_feature_selection.csv"),
-        ("📊 EDA Insights",             load_output("eda_insights.csv"),            "eda_insights.csv"),
-        ("💡 AI Insights",              load_output("ai_insights.csv"),             "ai_insights.csv"),
-        ("📈 Model Metrics",            load_output("model_metrics.csv"),           "model_metrics.csv"),
-        ("📋 Classification Report",    load_output("classification_report.csv"),   "classification_report.csv"),
-        ("🎯 Model Predictions",        load_predictions(),                          "model_predictions.csv"),
+        ("Dataset profile",             load_output("dataset_profile.csv"),        "dataset_profile.csv"),
+        ("Data dictionary",             load_output("data_dictionary.csv"),         "data_dictionary.csv"),
+        ("Data quality report",         load_output("data_quality_report.csv"),     "data_quality_report.csv"),
+        ("Feature dictionary",          load_output("feature_dictionary.csv"),      "feature_dictionary.csv"),
+        ("ML feature selection",        load_output("ml_feature_selection.csv"),    "ml_feature_selection.csv"),
+        ("EDA insights",                load_output("eda_insights.csv"),            "eda_insights.csv"),
+        ("Analytics insights",          load_output("ai_insights.csv"),             "ai_insights.csv"),
+        ("Model metrics",               load_output("model_metrics.csv"),           "model_metrics.csv"),
+        ("Classification report",       load_output("classification_report.csv"),   "classification_report.csv"),
+        ("Model predictions",           load_predictions(),                          "model_predictions.csv"),
     ]
 
     for label, df, filename in sections:
         with st.expander(label):
             if df is not None and not df.empty:
                 st.dataframe(df.head(20), use_container_width=True)
-                add_download(df, f"⬇️ Download {label}", filename)
+                add_download(df, f"Download {label}", filename)
             else:
                 st.warning(f"Not available yet. Run pipeline.py to generate {filename}.")
 

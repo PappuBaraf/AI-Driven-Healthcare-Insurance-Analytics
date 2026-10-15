@@ -1,0 +1,9 @@
+Feature,Source Table,Derived From,Type,Leakage Risk,Description
+payment_ratio,claims_and_billing,billed/paid,Financial,None,Ratio of paid to billed amount
+unpaid_amount,claims_and_billing,billed-paid,Financial,None,Difference between billed and paid
+high_cost_flag,claims_and_billing,billed_amount,Financial,None,1 if billed > 75th percentile
+denial_flag,claims_and_billing,claim_status,Target Derived,HIGH - do not use as model feature,1 if claim was denied - derived directly from target
+patient_claim_count,claims_and_billing,grouped by patient_id,Aggregate,Low - pre-outcome aggregates,Patient-level patient claim count
+patient_total_billed,claims_and_billing,grouped by patient_id,Aggregate,Low - pre-outcome aggregates,Patient-level patient total billed
+patient_avg_billed,claims_and_billing,grouped by patient_id,Aggregate,Low - pre-outcome aggregates,Patient-level patient avg billed
+patient_total_paid,claims_and_billing,grouped by patient_id,Aggregate,Low - pre-outcome aggregates,Patient-level patient total paid

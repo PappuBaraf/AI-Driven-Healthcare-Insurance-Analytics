@@ -1,0 +1,12 @@
+Table,Column,Original Type,New Type,Missing Before,Missing After,Duplicates,Transformation,Notes
+claims_and_billing,billing_id,str,str,0,0,0,none,
+claims_and_billing,patient_id,str,str,0,0,0,none,
+claims_and_billing,encounter_id,str,str,0,0,0,none,
+claims_and_billing,insurance_provider,str,str,0,0,0,none,
+claims_and_billing,payment_method,str,str,0,0,0,none,
+claims_and_billing,claim_id,str,str,10362,10362,0,none,
+claims_and_billing,claim_billing_date,str,str,10362,10362,0,none,
+claims_and_billing,billed_amount,float64,float64,0,0,0,none,
+claims_and_billing,paid_amount,float64,float64,0,0,0,none,
+claims_and_billing,claim_status,str,str,0,0,0,none,
+claims_and_billing,denial_reason,str,str,64002,64002,0,none,

@@ -1,0 +1,12 @@
+Table,Column,Data Type,Description,Missing Count,Missing %,Unique Values,Is Numeric,Is Date Hint,Key Type
+claims_and_billing,billing_id,str,Unique billing record identifier,0,0.0,70000,False,False,Primary Key
+claims_and_billing,patient_id,str,Patient identifier - links to patients table,0,0.0,60000,False,False,Foreign Key
+claims_and_billing,encounter_id,str,Encounter identifier - links to encounters table,0,0.0,70000,False,False,Primary Key
+claims_and_billing,insurance_provider,str,Name of insurance payer,0,0.0,7,False,False,
+claims_and_billing,payment_method,str,How the bill was paid (Insurance / Selfpay),0,0.0,2,False,False,
+claims_and_billing,claim_id,str,Insurance claim identifier,10362,14.8,59638,False,False,Foreign Key
+claims_and_billing,claim_billing_date,str,Date the claim was billed (DD-MM-YYYY),10362,14.8,115,False,True,
+claims_and_billing,billed_amount,float64,Total amount billed (USD),0,0.0,62203,True,False,
+claims_and_billing,paid_amount,float64,Amount actually paid (USD),0,0.0,55316,True,False,
+claims_and_billing,claim_status,str,Outcome of claim: Paid or Denied,0,0.0,2,False,False,
+claims_and_billing,denial_reason,str,Reason for denial (null when Paid),64002,91.43,14,False,False,

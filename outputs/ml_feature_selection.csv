@@ -1,0 +1,11 @@
+Feature,Used?,Leakage Risk,Reason
+billing_id,No,Medium,"Identifier: not a predictive signal, would cause overfitting"
+patient_id,No,Medium,"Identifier: not a predictive signal, would cause overfitting"
+encounter_id,No,Medium,"Identifier: not a predictive signal, would cause overfitting"
+insurance_provider,Yes,None,Safe predictor
+payment_method,No,HIGH,Post-outcome: only known after claim decision
+claim_id,No,Medium,"Identifier: not a predictive signal, would cause overfitting"
+claim_billing_date,Yes (as date parts),Low,Date features extracted - raw date string excluded
+billed_amount,Yes,None,Safe predictor
+paid_amount,No,HIGH,Post-outcome: only known after claim decision
+denial_reason,No,HIGH,Post-outcome: only known after claim decision

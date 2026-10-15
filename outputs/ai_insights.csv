@@ -1,0 +1,14 @@
+Category,Insight
+Observations,"The dataset contains 70,000 claim/billing records covering Q1 2025."
+Observations,"The denial rate is 8.57% (5,998 of 70,000 claims were denied)."
+Observations,"The average billed amount is $1,612.87; average paid is $1,040.65."
+Observations,"Total billed across all claims: $112,900,639.84; total paid: $72,845,650.54."
+Observations,There are 7 insurance providers in the dataset.
+Possible Insights,A denial rate around 8-9% is an operational metric that healthcare organizations typically try to minimize. Reducing duplicate claim submissions is a quick-win opportunity.
+Possible Insights,"The gap between average billed ($1,612.87) and paid ($1,040.65) amounts represents potential revenue leakage worth investigating."
+Possible Insights,"Prior authorization requirements and duplicate submissions are the two most frequent denial reasons, suggesting process standardization may reduce denial rates."
+Limitations,"This is a synthetic dataset generated for educational purposes. Denial rates, billing amounts and provider distributions may not reflect any real-world healthcare network."
+Limitations,"Without patient demographics, diagnoses and encounter data, the analysis is limited to claims-level patterns. A complete multi-table analysis would enable richer insights."
+Possible Operational Actions,Implement duplicate claim detection checks before submission to reduce the most common denial category.
+Possible Operational Actions,Strengthen prior authorization workflows to reduce authorization-related denials.
+Possible Operational Actions,Monitor monthly denial rates by insurance provider to identify payer-specific trends.

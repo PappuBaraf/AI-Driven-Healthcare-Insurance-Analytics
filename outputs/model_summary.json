@@ -1,0 +1,54 @@
+{
+  "target": "claim_status",
+  "positive_class": "Paid",
+  "negative_class": "Denied",
+  "features_used": [
+    "insurance_provider",
+    "payment_method",
+    "billed_amount",
+    "feat_claim_year",
+    "feat_claim_month",
+    "feat_claim_dayofweek",
+    "feat_claim_quarter"
+  ],
+  "n_train": 56000,
+  "n_test": 14000,
+  "accuracy": 0.9143,
+  "precision": 0.9143,
+  "recall": 1.0,
+  "f1": 0.9552,
+  "roc_auc": 0.5764,
+  "balanced_recall_denied": 0.9992,
+  "balanced_roc_auc": 0.5767,
+  "confusion_matrix_default": [
+    [
+      0,
+      1200
+    ],
+    [
+      0,
+      12800
+    ]
+  ],
+  "confusion_matrix_balanced": [
+    [
+      1199,
+      1
+    ],
+    [
+      10721,
+      2079
+    ]
+  ],
+  "class_encoding": {
+    "Denied": 0,
+    "Paid": 1
+  },
+  "risk_thresholds": {
+    "Low Risk": "denial_risk_score < 0.10",
+    "Medium Risk": "0.10 - 0.30",
+    "High Risk": "> 0.30"
+  },
+  "model_note": "Two Logistic Regression variants trained: default weights (high accuracy) and balanced weights (higher sensitivity to Denied class). Primary reported metrics use default weights. ROC-AUC ~0.58 indicates limited discriminative power with only insurance_provider, payment_method, billed_amount and date features - expected given the synthetic nature of this dataset. denial_reason excluded to prevent target leakage.",
+  "class_imbalance_note": "Dataset is imbalanced: 91.4% Paid / 8.6% Denied. A high accuracy score (~91%) can be achieved by predicting all claims as Paid. ROC-AUC is the more meaningful metric here."
+}

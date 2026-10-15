@@ -190,7 +190,7 @@ Run all cells from top to bottom (Kernel → Restart & Run All).
 
 | Page | Description |
 |------|-------------|
-| Patient & Provider Hub | De-identified bill review, repeated-line candidates, statistical outliers, arithmetic checks and policy keyword excerpts |
+| Patient & Provider Hub | De-identified bill review, repeated-line candidates, statistical outliers, arithmetic checks, policy keyword excerpts and an optional consent-gated Groq document explainer |
 | Executive Overview | Claims, billed/paid totals, denial rate and provider KPIs |
 | Claims & Insurance | Provider analysis, monthly trends, denial reasons and billing statistics |
 | Interactive Explorer | Filter by provider, outcome and billing dates; chart and download matching rows |
@@ -208,7 +208,9 @@ Run all cells from top to bottom (Kernel → Restart & Run All).
 - Policy search returns excerpts with matching words; it does not determine coverage, benefits or reimbursement.
 - The PDF reader extracts selectable text only; scanned-image OCR is not included.
 - Uploaded documents are not intentionally written to project files. Activity export contains generic events and aggregate counts only, remains in the current Streamlit session, and is not a persistent visitor log. Hosting providers may process requests under their own terms.
-- No third-party LLM is called and no API key is required. Never put an API key in the repository or a public notebook.
+- The optional Groq-powered document explainer sends up to 12,000 characters of selected bill content and up to 12,000 characters of policy text, plus the user's question, to Groq only after separate explicit consent. Verify Groq's current data-processing terms before enabling it; do not use it with identifiable patient information or protected health information.
+- Configure the key as `GROQ_API_KEY` in Streamlit Community Cloud's **Settings → Secrets**, or in a local `.streamlit/secrets.toml` file (which must never be committed). The feature remains disabled when the key is absent. Never put an API key in the repository, notebook, or chat.
+- AI explanations may be inaccurate and are not medical, legal, coverage, billing, or fraud determinations. Verify all suggestions with the provider or insurer.
 
 ---
 

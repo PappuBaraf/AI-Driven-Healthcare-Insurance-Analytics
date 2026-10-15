@@ -19,6 +19,7 @@ IMPORTANT:
 from pathlib import Path
 from io import BytesIO
 import json
+import os
 import re
 import unicodedata
 import warnings
@@ -30,6 +31,9 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from pypdf import PdfReader
+from streamlit.errors import StreamlitSecretNotFoundError
+
+from groq_service import GroqAPIError, request_groq_explanation
 
 warnings.filterwarnings("ignore")
 
@@ -240,6 +244,16 @@ def extract_document_text(uploaded_file, max_bytes=5_000_000):
     return text[:100_000]
 
 
+def get_groq_api_key():
+    environment_key = os.environ.get("GROQ_API_KEY", "").strip()
+    if environment_key:
+        return environment_key
+    try:
+        return str(st.secrets.get("GROQ_API_KEY", "")).strip()
+    except StreamlitSecretNotFoundError:
+        return ""
+
+
 def detect_bill_columns(columns, candidates):
     lowered = {str(column).lower().strip(): column for column in columns}
     for candidate in candidates:
@@ -440,6 +454,7 @@ if page == "Patient & Provider Hub":
         )
 
         policy_text = ""
+        bill_context = ""
         if policy_file is not None:
             try:
                 policy_text = extract_document_text(policy_file)
@@ -520,6 +535,13 @@ if page == "Patient & Provider Hub":
                             "the selected line-charge column contains numeric amounts."
                         )
                     st.caption("Column mapping is used only for this review; the uploaded file is not modified.")
+                    context_columns = [
+                        column for column in (
+                            description_col, amount_col, code_col, quantity_col, unit_price_col
+                        )
+                        if column != "(none)"
+                    ]
+                    bill_context = bill_df[context_columns].head(100).to_csv(index=False)[:12_000]
                     amounts = parse_numeric_column(bill_df[amount_col])
                     if not amounts.notna().any():
                         st.error(
@@ -658,6 +680,7 @@ if page == "Patient & Provider Hub":
                             )
                 else:
                     extracted_bill_text = extract_document_text(bill_file)
+                    bill_context = extracted_bill_text[:12_000]
                     st.info(
                         "Text was extracted from this document. PDF/text line parsing is limited: "
                         "repeated text may include page headers or other legitimate repeated wording. "
@@ -699,6 +722,70 @@ if page == "Patient & Provider Hub":
                 st.error(f"Could not review bill document: {exc}")
             except Exception as exc:
                 st.error(f"Bill review failed: {exc}")
+
+        st.markdown("#### Optional AI bill and policy explainer")
+        st.caption(
+            "Powered by Groq. Only use synthetic or de-identified content. The AI can be "
+            "wrong; verify its explanation with the billing office or insurer."
+        )
+        groq_api_key = get_groq_api_key()
+        if not groq_api_key:
+            st.info(
+                "AI explanations are not configured. Add GROQ_API_KEY to Streamlit Cloud "
+                "Settings → Secrets or to your local .streamlit/secrets.toml file."
+            )
+            st.session_state.pop("ai_document_explanation", None)
+        elif not bill_context and not policy_text:
+            st.info("Upload a bill or policy document above to enable an AI explanation.")
+            st.session_state.pop("ai_document_explanation", None)
+        else:
+            with st.form("groq_document_explainer"):
+                ai_consent = st.checkbox(
+                    "I consent to send the selected bill/policy text and my question to Groq "
+                    "for processing. I have removed identifying and protected health information.",
+                    key="groq_document_consent",
+                )
+                ai_question = st.text_area(
+                    "What would you like explained?",
+                    placeholder="For example: Summarize the listed charges and suggest neutral questions to ask.",
+                    max_chars=2000,
+                    key="groq_document_question",
+                )
+                ask_ai = st.form_submit_button("Ask AI to explain")
+
+            if not ai_consent:
+                st.session_state.pop("ai_document_explanation", None)
+
+            if ask_ai:
+                if not ai_consent:
+                    st.error("Confirm the separate Groq data-sharing consent before continuing.")
+                    st.session_state.pop("ai_document_explanation", None)
+                else:
+                    document_context = (
+                        f"Bill excerpt:\n{bill_context[:12_000]}\n\n"
+                        f"Policy excerpt:\n{policy_text[:12_000]}"
+                    )
+                    try:
+                        with st.spinner("Requesting an explanation from Groq..."):
+                            explanation = request_groq_explanation(
+                                groq_api_key, ai_question, document_context
+                            )
+                        st.session_state["ai_document_explanation"] = explanation
+                        record_activity(
+                            "ai_document_explanation",
+                            {
+                                "provider": "groq",
+                                "model": "llama-3.3-70b-versatile",
+                                "context_characters": len(document_context),
+                            },
+                        )
+                    except (ValueError, GroqAPIError) as exc:
+                        st.session_state.pop("ai_document_explanation", None)
+                        st.error(f"Could not generate an AI explanation: {exc}")
+
+            if ai_consent and st.session_state.get("ai_document_explanation"):
+                st.markdown("##### AI explanation")
+                st.markdown(st.session_state["ai_document_explanation"])
 
     st.divider()
     st.markdown("### What to ask next")
